@@ -1,25 +1,21 @@
-/**
- * Sign Up Screen Component
- * @format
- */
+
 
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
   Platform,
   Alert,
-  ActivityIndicator,
-  Image,
   Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useColorScheme } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { getApiUrl, API_ENDPOINTS } from '../config/api';
+import { useTheme } from '../theme/colors';
+import { FormInput, PasswordInput, Button, Logo } from '../components';
 
 function SignUpScreen({ navigation }) {
   const [formData, setFormData] = useState({
@@ -39,7 +35,7 @@ function SignUpScreen({ navigation }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showCountryModal, setShowCountryModal] = useState(false);
   const safeAreaInsets = useSafeAreaInsets();
-  const isDarkMode = useColorScheme() === 'dark';
+  const colors = useTheme();
 
   const countries = ['India', 'Thailand', 'Singapore', 'Malaysia', 'UAE'];
 
@@ -202,16 +198,64 @@ function SignUpScreen({ navigation }) {
     }
 
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      Alert.alert('Success', 'Account created successfully!', [
-        {
-          text: 'OK',
-          onPress: () => navigation.navigate('Login'),
+
+    try {
+      // Format date to YYYY-MM-DD
+      const formatDateForAPI = (date) => {
+        if (!date) return '';
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      // Prepare request body matching API format
+      const requestBody = {
+        username: formData.username,
+        password: formData.password,
+        fullName: formData.fullName,
+        dob: formatDateForAPI(formData.dateOfBirth),
+        address: formData.address,
+        country: formData.country,
+        email: formData.email,
+        phone: formData.phoneNumber,
+      };
+
+      // Make API call
+      const response = await fetch(getApiUrl(API_ENDPOINTS.SIGNUP), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      ]);
-    }, 1500);
+        body: JSON.stringify(requestBody),
+      });
+
+      const data = await response.json();
+
+      setIsLoading(false);
+
+      if (response.ok) {
+        Alert.alert('Success', 'Account created successfully!', [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('Login'),
+          },
+        ]);
+      } else {
+        // Handle API error response
+        const errorMessage = data.message || data.error || 'Failed to create account. Please try again.';
+        Alert.alert('Error', errorMessage);
+      }
+    } catch (error) {
+      setIsLoading(false);
+      console.error('Signup error:', error);
+      Alert.alert(
+        'Error',
+        error.message === 'Network request failed'
+          ? 'Unable to connect to server. Please check your connection.'
+          : 'An error occurred. Please try again later.'
+      );
+    }
   };
 
   const handleDateChange = (event, selectedDate) => {
@@ -235,16 +279,6 @@ function SignUpScreen({ navigation }) {
     });
   };
 
-  const colors = {
-    background: isDarkMode ? '#1a1a1a' : '#ffffff',
-    text: isDarkMode ? '#ffffff' : '#1a1a1a',
-    textSecondary: isDarkMode ? '#b0b0b0' : '#666666',
-    border: isDarkMode ? '#3a3a3a' : '#e0e0e0',
-    primary: '#007AFF',
-    error: '#FF3B30',
-    inputBackground: isDarkMode ? '#2a2a2a' : '#ffffff',
-    dropdownBackground: isDarkMode ? '#2a2a2a' : '#f8f9fa',
-  };
 
   const isFormValid = () => {
     let allValid = true;
@@ -297,13 +331,7 @@ function SignUpScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image
-            source={require('../assets/logo.jpg')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        </View>
+        <Logo />
 
         {/* Header */}
         <View style={styles.header}>
@@ -316,102 +344,49 @@ function SignUpScreen({ navigation }) {
         {/* Form */}
         <View style={styles.form}>
           {/* Username */}
-          <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Username <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.inputBackground,
-                  borderColor: errors.username ? colors.error : colors.border,
-                  color: colors.text,
-                },
-              ]}
-              placeholder="Enter username"
-              placeholderTextColor={colors.textSecondary}
-              value={formData.username}
-              onChangeText={(value) => handleFieldChange('username', value)}
-              onBlur={() => handleBlur('username')}
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!isLoading}
-            />
-            {errors.username && (
-              <Text style={styles.errorText}>{errors.username}</Text>
-            )}
-          </View>
+          <FormInput
+            label="Username"
+            value={formData.username}
+            onChangeText={(value) => handleFieldChange('username', value)}
+            onBlur={() => handleBlur('username')}
+            placeholder="Enter username"
+            error={errors.username}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isLoading}
+            required
+            colors={colors}
+          />
 
           {/* Password */}
-          <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Password <Text style={styles.required}>*</Text>
-            </Text>
-            <View style={styles.passwordContainer}>
-              <TextInput
-                style={[
-                  styles.passwordInput,
-                  {
-                    backgroundColor: colors.inputBackground,
-                    borderColor: errors.password ? colors.error : colors.border,
-                    color: colors.text,
-                  },
-                ]}
-                placeholder="Enter password"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.password}
-                onChangeText={(value) => handleFieldChange('password', value)}
-                onBlur={() => handleBlur('password')}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowPassword(!showPassword)}
-                disabled={isLoading}
-              >
-                <Text style={[styles.eyeButtonText, { color: colors.primary }]}>
-                  {showPassword ? 'Hide' : 'Show'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            {errors.password && (
-              <Text style={styles.errorText}>{errors.password}</Text>
-            )}
-            <Text style={[styles.hintText, { color: colors.textSecondary }]}>
-              Must be 8+ characters with uppercase, number, and special character
-            </Text>
-          </View>
+          <PasswordInput
+            label="Password"
+            value={formData.password}
+            onChangeText={(value) => handleFieldChange('password', value)}
+            onBlur={() => handleBlur('password')}
+            placeholder="Enter password"
+            error={errors.password}
+            showPassword={showPassword}
+            onTogglePassword={() => setShowPassword(!showPassword)}
+            editable={!isLoading}
+            required
+            hint="Must be 8+ characters with uppercase, number, and special character"
+            colors={colors}
+          />
 
           {/* Full Name */}
-          <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Full Name <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.inputBackground,
-                  borderColor: errors.fullName ? colors.error : colors.border,
-                  color: colors.text,
-                },
-              ]}
-              placeholder="Enter full name"
-              placeholderTextColor={colors.textSecondary}
-              value={formData.fullName}
-              onChangeText={(value) => handleFieldChange('fullName', value)}
-              onBlur={() => handleBlur('fullName')}
-              autoCapitalize="words"
-              editable={!isLoading}
-            />
-            {errors.fullName && (
-              <Text style={styles.errorText}>{errors.fullName}</Text>
-            )}
-          </View>
+          <FormInput
+            label="Full Name"
+            value={formData.fullName}
+            onChangeText={(value) => handleFieldChange('fullName', value)}
+            onBlur={() => handleBlur('fullName')}
+            placeholder="Enter full name"
+            error={errors.fullName}
+            autoCapitalize="words"
+            editable={!isLoading}
+            required
+            colors={colors}
+          />
 
           {/* Date of Birth */}
           <View style={styles.inputContainer}>
@@ -484,33 +459,19 @@ function SignUpScreen({ navigation }) {
           </View>
 
           {/* Address */}
-          <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Address <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                styles.textArea,
-                {
-                  backgroundColor: colors.inputBackground,
-                  borderColor: errors.address ? colors.error : colors.border,
-                  color: colors.text,
-                },
-              ]}
-              placeholder="Enter your address"
-              placeholderTextColor={colors.textSecondary}
-              value={formData.address}
-              onChangeText={(value) => handleFieldChange('address', value)}
-              onBlur={() => handleBlur('address')}
-              multiline
-              numberOfLines={3}
-              editable={!isLoading}
-            />
-            {errors.address && (
-              <Text style={styles.errorText}>{errors.address}</Text>
-            )}
-          </View>
+          <FormInput
+            label="Address"
+            value={formData.address}
+            onChangeText={(value) => handleFieldChange('address', value)}
+            onBlur={() => handleBlur('address')}
+            placeholder="Enter your address"
+            error={errors.address}
+            multiline
+            numberOfLines={3}
+            editable={!isLoading}
+            required
+            colors={colors}
+          />
 
           {/* Country */}
           <View style={styles.inputContainer}>
@@ -621,80 +582,45 @@ function SignUpScreen({ navigation }) {
           </Modal>
 
           {/* Email */}
-          <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Email <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.inputBackground,
-                  borderColor: errors.email ? colors.error : colors.border,
-                  color: colors.text,
-                },
-              ]}
-              placeholder="Enter email"
-              placeholderTextColor={colors.textSecondary}
-              value={formData.email}
-              onChangeText={(value) => handleFieldChange('email', value)}
-              onBlur={() => handleBlur('email')}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!isLoading}
-            />
-            {errors.email && (
-              <Text style={styles.errorText}>{errors.email}</Text>
-            )}
-          </View>
+          <FormInput
+            label="Email"
+            value={formData.email}
+            onChangeText={(value) => handleFieldChange('email', value)}
+            onBlur={() => handleBlur('email')}
+            placeholder="Enter email"
+            error={errors.email}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isLoading}
+            required
+            colors={colors}
+          />
 
           {/* Phone Number */}
-          <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Phone Number <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.inputBackground,
-                  borderColor: errors.phoneNumber ? colors.error : colors.border,
-                  color: colors.text,
-                },
-              ]}
-              placeholder="Enter phone number"
-              placeholderTextColor={colors.textSecondary}
-              value={formData.phoneNumber}
-              onChangeText={(value) => handleFieldChange('phoneNumber', value)}
-              onBlur={() => handleBlur('phoneNumber')}
-              keyboardType="phone-pad"
-              editable={!isLoading}
-            />
-            {errors.phoneNumber && (
-              <Text style={styles.errorText}>{errors.phoneNumber}</Text>
-            )}
-          </View>
+          <FormInput
+            label="Phone Number"
+            value={formData.phoneNumber}
+            onChangeText={(value) => handleFieldChange('phoneNumber', value)}
+            onBlur={() => handleBlur('phoneNumber')}
+            placeholder="Enter phone number"
+            error={errors.phoneNumber}
+            keyboardType="phone-pad"
+            editable={!isLoading}
+            required
+            colors={colors}
+          />
 
           {/* Submit Button */}
-          <TouchableOpacity
-            style={[
-              styles.submitButton,
-              {
-                backgroundColor: isFormValid() ? colors.primary : colors.textSecondary,
-                opacity: isLoading ? 0.7 : 1,
-              },
-            ]}
+          <Button
+            title="Create Account"
             onPress={handleSubmit}
+            loading={isLoading}
             disabled={!isFormValid() || isLoading}
-            activeOpacity={0.8}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.submitButtonText}>Create Account</Text>
-            )}
-          </TouchableOpacity>
+            variant={isFormValid() ? 'primary' : 'secondary'}
+            colors={colors}
+            style={styles.submitButton}
+          />
 
           {/* Login Link */}
           <View style={styles.loginContainer}>

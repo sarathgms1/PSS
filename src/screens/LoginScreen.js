@@ -1,63 +1,178 @@
-/**
- * Login Screen Component
- * @format
- */
 
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   Alert,
-  ActivityIndicator,
-  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useColorScheme } from 'react-native';
+import { getApiUrl, API_ENDPOINTS } from '../config/api';
+import { useTheme } from '../theme/colors';
+import { FormInput, PasswordInput, Button, Logo } from '../components';
 
 function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const safeAreaInsets = useSafeAreaInsets();
-  const isDarkMode = useColorScheme() === 'dark';
+  const colors = useTheme();
 
-  const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
+  const validateField = (name, value) => {
+    let error = '';
+
+    switch (name) {
+      case 'email':
+        if (!value.trim()) {
+          error = 'Email is required';
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+          error = 'Please enter a valid email address';
+        }
+        break;
+
+      case 'password':
+        if (!value.trim()) {
+          error = 'Password is required';
+        } else if (value.length < 6) {
+          error = 'Password must be at least 6 characters';
+        }
+        break;
+
+      default:
+        break;
     }
 
-    if (!email.includes('@')) {
-      Alert.alert('Error', 'Please enter a valid email address');
+    return error;
+  };
+
+  const handleFieldChange = (name, value) => {
+    if (name === 'email') {
+      setEmail(value);
+    } else if (name === 'password') {
+      setPassword(value);
+    }
+
+    // Validate immediately and update errors
+    const error = validateField(name, value);
+    setErrors(prev => ({
+      ...prev,
+      [name]: error || '',
+    }));
+  };
+
+  const handleBlur = (name) => {
+    const value = name === 'email' ? email : password;
+    const error = validateField(name, value);
+    setErrors(prev => ({
+      ...prev,
+      [name]: error,
+    }));
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    const emailError = validateField('email', email);
+    const passwordError = validateField('password', password);
+
+    if (emailError) {
+      newErrors.email = emailError;
+    }
+    if (passwordError) {
+      newErrors.password = passwordError;
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleLogin = async () => {
+    if (!validateForm()) {
       return;
     }
 
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+
+    try {
+      // Prepare request body
+      const requestBody = {
+        usernameOrEmail: email.trim(),
+        password: password,
+      };
+
+      // Make API call
+      const response = await fetch(getApiUrl(API_ENDPOINTS.LOGIN), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const data = await response.json();
+      console.log(data);
+
       setIsLoading(false);
-      // Navigate to Home screen after successful login
-      navigation.replace('Home');
-    }, 1500);
+
+      if (response.ok) {
+        // Clear any previous errors
+        setErrors({});
+        // Login successful - navigate to Home screen
+        // You can also store the token/user data here if the API returns it
+        // For example: AsyncStorage.setItem('token', data.token);
+        navigation.replace('Home');
+      } else {
+        // Handle API error response and show inline errors
+        const newErrors = {};
+        
+        // Check for field-specific errors
+        if (data.errors) {
+          // Handle validation errors object (e.g., { email: "Invalid email", password: "Invalid password" })
+          if (data.errors.email) {
+            newErrors.email = data.errors.email;
+          }
+          if (data.errors.password) {
+            newErrors.password = data.errors.password;
+          }
+        }
+        
+        // Check for general error messages that might be field-specific
+        const errorMessage = data.message || data.error || 'Login failed. Please check your credentials.';
+        
+        // Try to determine which field the error relates to
+        if (errorMessage.toLowerCase().includes('email') && !newErrors.email) {
+          newErrors.email = errorMessage;
+        } else if (errorMessage.toLowerCase().includes('password') && !newErrors.password) {
+          newErrors.password = errorMessage;
+        } else if (errorMessage.toLowerCase().includes('credential') || errorMessage.toLowerCase().includes('invalid')) {
+          // If it's a credentials error, show on both fields or just password
+          newErrors.password = errorMessage;
+          if (!newErrors.email) {
+            newErrors.email = 'Invalid email or password';
+          }
+        } else if (Object.keys(newErrors).length === 0) {
+          // If no field-specific error, show general error
+          newErrors.password = errorMessage;
+        }
+        
+        setErrors(newErrors);
+      }
+    } catch (error) {
+      setIsLoading(false);
+      console.error('Login error:', error);
+      Alert.alert(
+        'Error',
+        error.message === 'Network request failed'
+          ? 'Unable to connect to server. Please check your connection.'
+          : 'An error occurred. Please try again later.'
+      );
+    }
   };
 
-  const colors = {
-    background: isDarkMode ? '#1a1a1a' : '#ffffff',
-    card: isDarkMode ? '#2a2a2a' : '#f8f9fa',
-    text: isDarkMode ? '#ffffff' : '#1a1a1a',
-    textSecondary: isDarkMode ? '#b0b0b0' : '#666666',
-    border: isDarkMode ? '#3a3a3a' : '#e0e0e0',
-    primary: '#007AFF',
-    primaryDark: '#0051D5',
-    error: '#FF3B30',
-    inputBackground: isDarkMode ? '#2a2a2a' : '#ffffff',
-  };
 
   return (
     <KeyboardAvoidingView
@@ -76,13 +191,7 @@ function LoginScreen({ navigation }) {
         ]}
       >
         {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image
-            source={require('../assets/logo.jpg')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        </View>
+        <Logo />
 
         {/* Header */}
         <View style={styles.header}>
@@ -95,61 +204,33 @@ function LoginScreen({ navigation }) {
         {/* Form */}
         <View style={styles.form}>
           {/* Email Input */}
-          <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: colors.text }]}>Email</Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.inputBackground,
-                  borderColor: colors.border,
-                  color: colors.text,
-                },
-              ]}
-              placeholder="Enter your email"
-              placeholderTextColor={colors.textSecondary}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!isLoading}
-            />
-          </View>
+          <FormInput
+            label="Email"
+            value={email}
+            onChangeText={(value) => handleFieldChange('email', value)}
+            onBlur={() => handleBlur('email')}
+            placeholder="Enter your email"
+            error={errors.email}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isLoading}
+            colors={colors}
+          />
 
           {/* Password Input */}
-          <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: colors.text }]}>Password</Text>
-            <View style={styles.passwordContainer}>
-              <TextInput
-                style={[
-                  styles.passwordInput,
-                  {
-                    backgroundColor: colors.inputBackground,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  },
-                ]}
-                placeholder="Enter your password"
-                placeholderTextColor={colors.textSecondary}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowPassword(!showPassword)}
-                disabled={isLoading}
-              >
-                <Text style={[styles.eyeButtonText, { color: colors.primary }]}>
-                  {showPassword ? 'Hide' : 'Show'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <PasswordInput
+            label="Password"
+            value={password}
+            onChangeText={(value) => handleFieldChange('password', value)}
+            onBlur={() => handleBlur('password')}
+            placeholder="Enter your password"
+            error={errors.password}
+            showPassword={showPassword}
+            onTogglePassword={() => setShowPassword(!showPassword)}
+            editable={!isLoading}
+            colors={colors}
+          />
 
           {/* Forgot Password */}
           <TouchableOpacity
@@ -162,24 +243,14 @@ function LoginScreen({ navigation }) {
           </TouchableOpacity>
 
           {/* Login Button */}
-          <TouchableOpacity
-            style={[
-              styles.loginButton,
-              {
-                backgroundColor: colors.primary,
-                opacity: isLoading ? 0.7 : 1,
-              },
-            ]}
+          <Button
+            title="Sign In"
             onPress={handleLogin}
+            loading={isLoading}
             disabled={isLoading}
-            activeOpacity={0.8}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.loginButtonText}>Sign In</Text>
-            )}
-          </TouchableOpacity>
+            colors={colors}
+            style={styles.loginButton}
+          />
 
           {/* Sign Up Link */}
           <View style={styles.signUpContainer}>
@@ -209,14 +280,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  logo: {
-    width: 200,
-    height: 80,
-  },
   header: {
     marginBottom: 40,
     alignItems: 'center',
@@ -232,42 +295,6 @@ const styles = StyleSheet.create({
   form: {
     width: '100%',
   },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    height: 50,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    fontSize: 16,
-  },
-  passwordContainer: {
-    position: 'relative',
-  },
-  passwordInput: {
-    height: 50,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingRight: 80,
-    fontSize: 16,
-  },
-  eyeButton: {
-    position: 'absolute',
-    right: 16,
-    top: 12,
-    padding: 4,
-  },
-  eyeButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   forgotPasswordContainer: {
     alignSelf: 'flex-end',
     marginBottom: 24,
@@ -277,16 +304,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   loginButton: {
-    height: 50,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 24,
-  },
-  loginButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   signUpContainer: {
     flexDirection: 'row',
